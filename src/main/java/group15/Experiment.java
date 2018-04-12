@@ -5,6 +5,7 @@ import de.learnlib.algorithms.lstar.dfa.ClassicLStarDFABuilder;
 import de.learnlib.algorithms.ttt.dfa.TTTLearnerDFA;
 import de.learnlib.algorithms.ttt.dfa.TTTLearnerDFABuilder;
 import de.learnlib.api.oracle.MembershipOracle.DFAMembershipOracle;
+import de.learnlib.filter.cache.sul.SULCaches;
 import de.learnlib.filter.statistic.oracle.CounterOracle.DFACounterOracle;
 import de.learnlib.oracle.equivalence.WMethodEQOracle.DFAWMethodEQOracle;
 import de.learnlib.oracle.membership.SimulatorOracle.DFASimulatorOracle;
@@ -20,32 +21,42 @@ public final class Experiment {
 
     // Experiment Parameters
 
-    private static Boolean randomDFA = true; // use this to manually put in DFA or just get random ones
+    private static final Boolean randomDFA = true; // use this to manually put in DFA or just get random ones
 
-    private static int DFASize = 5; // size of the random DFA
+    private static final int DFASize = 60; // size of the random DFA
 
-    private static int alphabetSize = 6; // alphabet size of the random DFA
+    private static final int alphabetSize = 6; // alphabet size of the random DFA
 
-    private static final int EXPLORATION_DEPTH = 4;
+    private static final  int EXPLORATION_DEPTH = 4; // not sure what this is just keep it as 4
 
-    private Experiment() {
-    }
+    private Experiment() {}
 
     public static void main(String[] args) {
 
+
+        System.out.println("Started experiment with values:");
+        System.out.println("random DFA: " + randomDFA + " | DFA size: " + DFASize + " | DFA alphabet size: " + alphabetSize);
+
+
         // load DFA and alphabet
-        CompactDFA<Character> target = constructSUL(randomDFA, DFASize, alphabetSize);
+        CompactDFA<Character> target = constructSUL(randomDFA, alphabetSize, DFASize);
         Alphabet<Character> inputs = target.getInputAlphabet();
 
 
         // construct simulator membership query oracles
         // input  - Character (determined by example)
-        DFAMembershipOracle<Character> sulLStar = new DFASimulatorOracle<>(target);
-        DFAMembershipOracle<Character> sulTTT = new DFASimulatorOracle<>(target);
+        DFAMembershipOracle<Character> sulLStarMem = new DFASimulatorOracle<>(target);
+        DFAMembershipOracle<Character> sulTTTMem = new DFASimulatorOracle<>(target);
+
+        DFAMembershipOracle<Character> sulLStarEq = new DFASimulatorOracle<>(target);
+        DFAMembershipOracle<Character> sulTTTEq = new DFASimulatorOracle<>(target);
 
         // oracle for counting queries wraps SUL
-        DFACounterOracle<Character> mqOracleLStar = new DFACounterOracle<>(sulLStar, "membership queries");
-        DFACounterOracle<Character> mqOracleTTT = new DFACounterOracle<>(sulTTT, "membership queries");
+        DFACounterOracle<Character> mqOracleLStarMem = new DFACounterOracle<>(sulLStarMem, "membership queries");
+        DFACounterOracle<Character> mqOracleTTTMem = new DFACounterOracle<>(sulTTTMem,"membership queries");
+
+        DFACounterOracle<Character> mqOracleLStarEq = new DFACounterOracle<>(sulLStarEq, "equivalence queries");
+        DFACounterOracle<Character> mqOracleTTTEq = new DFACounterOracle<>(sulTTTEq,"equivalence queries");
 
         // Learners
         ClassicLStarDFA<Character> LStar;
@@ -64,50 +75,57 @@ public final class Experiment {
         // Set up and run the experiment
         tttLearner =
                 new TTTLearnerDFABuilder<Character>().withAlphabet(inputs)
-                        .withOracle(mqOracleTTT)
+                        .withOracle(mqOracleTTTMem)
+                        .withOracle(mqOracleTTTEq)
                         .create();
 
-        wMethodTTT = new DFAWMethodEQOracle<>(mqOracleTTT, EXPLORATION_DEPTH);
+        wMethodTTT = new DFAWMethodEQOracle<>(mqOracleTTTMem, EXPLORATION_DEPTH);
 
         experimentTTT = new DFAExperiment<>(tttLearner, wMethodTTT, inputs);
 
-        experimentTTT.setProfile(true);
-
-        experimentTTT.setLogModels(true);
-
+        long TTTTimerStart = System.nanoTime();
         experimentTTT.run();
+
+        long TTTTimerEnd = System.nanoTime();
+
+        long TTTDuration = ((TTTTimerEnd - TTTTimerStart) / 1000000 );  // milliseconds
 
         DFA<?, Character> resultT = experimentTTT.getFinalHypothesis();
 
         // Print out the statistics
         System.out.println("---------------TTT----------------");
+        System.out.println("Time taken:  " + TTTDuration);
         System.out.println(experimentTTT.getRounds().getSummary());
-        System.out.println(mqOracleTTT.getStatisticalData().getSummary());
-
+        System.out.println(mqOracleTTTMem.getStatisticalData().getDetails());
+        System.out.println(mqOracleTTTEq.getStatisticalData());
 
         //==================================L STAR============================
         // Set up and run the experiment
         LStar =
                 new ClassicLStarDFABuilder<Character>().withAlphabet(inputs) // input alphabet
-                        .withOracle(mqOracleLStar) // membership oracle
+                        .withOracle(mqOracleLStarMem) // membership oracle
+                        .withOracle(mqOracleLStarEq)
                         .create();
 
-        wMethodLStar = new DFAWMethodEQOracle<>(mqOracleLStar, EXPLORATION_DEPTH);
+        wMethodLStar = new DFAWMethodEQOracle<>(mqOracleLStarMem, EXPLORATION_DEPTH);
 
         experimentLStar = new DFAExperiment<>(LStar, wMethodLStar, inputs);
 
-        experimentLStar.setProfile(true);
-
-        experimentLStar.setLogModels(true);
-
+        long LStarTimerStart = System.nanoTime();
         experimentLStar.run();
+
+        long LStarTimerEnd = System.nanoTime();
+
+        long LStarDuration = ((LStarTimerEnd - LStarTimerStart) / 1000000 );  // milliseconds
 
         DFA<?, Character> resultL = experimentLStar.getFinalHypothesis();
 
         // Print out the statistics
-        System.out.println("--------------L STAR---------------");
+        System.out.println("--------------L STAR--------------");
+        System.out.println("Time taken:  " + LStarDuration);
         System.out.println(experimentLStar.getRounds().getSummary());
-        System.out.println(mqOracleLStar.getStatisticalData().getSummary());
+        System.out.println(mqOracleLStarMem.getStatisticalData());
+        System.out.println(mqOracleLStarEq.getStatisticalData());
 
 
         System.out.println("-------------------------------------------------------");
