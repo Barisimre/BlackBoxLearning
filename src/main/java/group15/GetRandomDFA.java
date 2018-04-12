@@ -9,11 +9,11 @@ import java.util.Random;
 
 class GetRandomDFA {
 
-    CompactDFA<Character> randomDFA(int DFASize, int alphabetSize) {
+    CompactDFA<Character> randomDFA(int DFASize, int alphabetSize, int seed) {
 
         Alphabet<Character> INPUT_ALPHABET = Alphabets.characters((char) 97, (char) (97 + alphabetSize));
 
-        final Random random = new Random(42);
+        final Random random = new Random(seed);
 
         return RandomAutomata.randomDFA(random, DFASize, INPUT_ALPHABET);
     }
